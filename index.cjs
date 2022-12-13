@@ -8,7 +8,7 @@ const bodyParser = require('body-parser');
 require('dotenv').config();
 
 const app = express();
-const port = 8080; // default port to listen
+const port = process.env.PORT; // default port to listen
 
 const corsOptions = {
    origin: '*', 
@@ -29,7 +29,9 @@ app.use(bodyParser.json());
 
 app.use(async (req, res, next) => {
   try {
+      console.log(Object.keys(req))
       req.db = await pool.getConnection();
+      console.log(Object.keys(req))
       req.db.connection.config.namedPlaceholders = true;
   
       // Traditional mode ensures not null is respected for unsupplied fields, ensures valid JavaScript dates, etc.
@@ -45,6 +47,23 @@ app.use(async (req, res, next) => {
       if (req.db) req.db.release();
       throw err;
     }
+});
+
+app.get('/students', (req, res) => {
+  console.log(req)
+  const students = [
+    {
+      name: 'Ramiro'
+    },
+    {
+      name: 'Bryan'
+    },
+    {
+      name: 'Kenneth'
+    }
+  ];
+
+  res.json({ students });
 })
 
 app.post('/register', async function (req, res) {
@@ -151,6 +170,7 @@ app.use(async function verifyJwt(req, res, next) {
   await next();
 });
 
+// GET request to http://localhost:8080/last-messages ends here
 app.get('/last-messages', async (req, res) => {
     try {
 
