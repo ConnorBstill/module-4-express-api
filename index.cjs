@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
 
+// Allows us to access the .env
 require('dotenv').config();
 
 const app = express();
@@ -12,7 +13,7 @@ const port = process.env.PORT; // default port to listen
 
 const corsOptions = {
    origin: '*', 
-   credentials: true,            //access-control-allow-credentials:true
+   credentials: true,  // access-control-allow-credentials:true
    optionSuccessStatus: 200,
 }
 
@@ -25,64 +26,80 @@ const pool = mysql.createPool({
 
 app.use(cors(corsOptions));
 
+// Makes Express parse the JSON body of any requests and adds the body to the req object
 app.use(bodyParser.json());
 
 app.use(async (req, res, next) => {
   try {
-      console.log(Object.keys(req))
-      req.db = await pool.getConnection();
-      console.log(Object.keys(req))
-      req.db.connection.config.namedPlaceholders = true;
-  
-      // Traditional mode ensures not null is respected for unsupplied fields, ensures valid JavaScript dates, etc.
-      await req.db.query('SET SESSION sql_mode = "TRADITIONAL"');
-      await req.db.query(`SET time_zone = '-8:00'`);
-  
-      await next();
-  
-      req.db.release();
-    } catch (err) {
-      // If anything downstream throw an error, we must release the connection allocated for the request
-      console.log(err)
-      if (req.db) req.db.release();
-      throw err;
-    }
+    // Connecting to our SQL db. req gets modified and is available down the line in other middleware and endpoint functions
+    req.db = await pool.getConnection();
+    req.db.connection.config.namedPlaceholders = true;
+
+    // Traditional mode ensures not null is respected for unsupplied fields, ensures valid JavaScript dates, etc.
+    await req.db.query('SET SESSION sql_mode = "TRADITIONAL"');
+    await req.db.query(`SET time_zone = '-8:00'`);
+
+    // Moves the request on down the line to the n ext middleware functions and/or the endpoint it's headed for
+    await next();
+
+    // After the endpoint has been reached and resolved, disconnects from the database
+    req.db.release();
+  } catch (err) {
+    // If anything downstream throw an error, we must release the connection allocated for the request
+    console.log(err)
+    // If an error occurs, disconnects from the database
+    if (req.db) req.db.release();
+    throw err;
+  }
 });
 
+// Creates a GET endpoint at <WHATEVER_THE_BASE_URL_IS>/students
 app.get('/students', (req, res) => {
-  console.log(req)
+  console.log('GET to /students');
   const students = [
     {
+      id: 1,
       name: 'Ramiro'
     },
     {
+      id: 2,
       name: 'Bryan'
     },
     {
+      id: 3,
       name: 'Kenneth'
     }
   ];
 
+  // Attaches JSON content to the response
   res.json({ students });
-})
+});
+
+// Creates a POST endpoint at <WHATEVER_THE_BASE_URL_IS>/students
+app.post('/students', (req, res) => {
+  console.log('POST to /students', req.body);
+
+  res.json({ success: true });
+});
 
 app.post('/register', async function (req, res) {
   try {
     let encodedUser;
-    console.log('req.body', req.body)
+
     // Hashes the password and inserts the info into the `user` table
     await bcrypt.hash(req.body.password, 10).then(async hash => {
       try {
+        console.log('HASHED PASSWORD', hash);
+
         const [user] = await req.db.query(`
           INSERT INTO user (user_name, password)
           VALUES (:username, :password);
         `, {
-          // email: req.body.email,
-          // fname: req.body.fname,
-          // lname: req.body.lname,
           username: req.body.username,
           password: hash
         });
+
+        console.log('USER', user)
 
         encodedUser = jwt.sign(
           { 
@@ -91,14 +108,12 @@ app.post('/register', async function (req, res) {
           },
           process.env.JWT_KEY
         );
+
+        console.log('ENCODED USER', encodedUser);
       } catch (error) {
         console.log('error', error);
       }
     });
-
-    // res.cookie('user_jwt', `${encodedUser}`, {
-    //   httpOnly: true
-    // });
 
     res.json({ jwt: encodedUser });
   } catch (err) {
@@ -184,12 +199,12 @@ app.get('/last-messages', async (req, res) => {
     
         res.json({ lastMessages });
     } catch (err) {
-      console.log(err)
-        res.json({ err });
+      console.log(err);
+      res.json({ err });
     }
 });
 
-// start the Express server
+// Start the Express server
 app.listen(port, () => {
-    console.log( `server started at http://localhost:${port}`);
+  console.log(`server started at http://localhost:${port}`);
 });
