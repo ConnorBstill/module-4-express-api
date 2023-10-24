@@ -39,7 +39,7 @@ app.use(async (req, res, next) => {
     await req.db.query('SET SESSION sql_mode = "TRADITIONAL"');
     await req.db.query(`SET time_zone = '-8:00'`);
 
-    // Moves the request on down the line to the n ext middleware functions and/or the endpoint it's headed for
+    // Moves the request on down the line to the next middleware functions and/or the endpoint it's headed for
     await next();
 
     // After the endpoint has been reached and resolved, disconnects from the database
@@ -54,25 +54,42 @@ app.use(async (req, res, next) => {
 });
 
 // Creates a GET endpoint at <WHATEVER_THE_BASE_URL_IS>/students
-app.get('/students', (req, res) => {
+app.get('/car', async (req, res) => {
   console.log('GET to /students');
-  const students = [
-    {
-      id: 1,
-      name: 'Ramiro'
-    },
-    {
-      id: 2,
-      name: 'Bryan'
-    },
-    {
-      id: 3,
-      name: 'Kenneth'
-    }
-  ];
+  const [cars] = await req.db.query(`
+    SELECT * FROM car;
+  `);
+
+  console.log('cars', cars);
 
   // Attaches JSON content to the response
-  res.json({ students });
+  res.json({ cars });
+});
+
+app.post('/car', async (req, res) => {
+  console.log('POST to /students', req.body);
+  const { 
+    make_id,
+    model,
+    user_id,
+    deleted_flag
+   } = req.body;
+
+  const [insert] = await req.db.query(`
+    INSERT INTO car (make_id, model, date_created, user_id, deleted_flag)
+    VALUES (:make_id, :model, NOW(), :user_id, :deleted_flag);
+  `, { make_id, model, user_id, deleted_flag });
+
+  console.log('insert', insert);
+
+  // Attaches JSON content to the response
+  res.json({
+    id: insert.insertId,
+    make_id,
+    model,
+    user_id,
+    deleted_flag
+   });
 });
 
 // Creates a POST endpoint at <WHATEVER_THE_BASE_URL_IS>/students
@@ -186,7 +203,7 @@ app.use(async function verifyJwt(req, res, next) {
 });
 
 // GET request to http://localhost:8080/last-messages ends here
-app.get('/last-messages', async (req, res) => {
+app.get('/last-messages', async (req, res, next) => {
     try {
 
       const [lastMessages] = await req.db.query(`
