@@ -13,7 +13,8 @@ const port = process.env.PORT; // default port to listen
 
 const corsOptions = {
    origin: '*', 
-   credentials: true,  // access-control-allow-credentials:true
+   credentials: true,  
+   'access-control-allow-credentials': true,
    optionSuccessStatus: 200,
 }
 
@@ -53,6 +54,12 @@ app.use(async (req, res, next) => {
   }
 });
 
+app.delete('/car/:id', (req, res) => {
+  console.log(req.params.id)
+
+  res.json({ success: true })
+})
+
 // Creates a GET endpoint at <WHATEVER_THE_BASE_URL_IS>/students
 app.get('/car', async (req, res) => {
   console.log('GET to /students');
@@ -67,7 +74,7 @@ app.get('/car', async (req, res) => {
 });
 
 app.post('/car', async (req, res) => {
-  console.log('POST to /students', req.body);
+  console.log('POST to /car', req.body);
   const { 
     make_id,
     model,
@@ -99,7 +106,7 @@ app.post('/students', (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/register', async function (req, res) {
+app.post('/register', async function (req, res, next) {
   try {
     let encodedUser;
 
@@ -143,9 +150,9 @@ app.post('/authenticate', async function (req, res) {
   try {
     console.log('ONE')
     const { username, password } = req.body;
-    const [[user]] = await req.db.query(`SELECT * FROM user WHERE user_name = :username`, {  username });
+    const [[user]] = await req.db.query(`SELECT * FROM user WHERE user_name = :username`, { username });
 
-    if (!user) res.json('Email not found');
+    if (!user) res.json('Username not found');
     const dbPassword = `${user.password}`
     const compare = await bcrypt.compare(password, dbPassword);
 
@@ -163,7 +170,7 @@ app.post('/authenticate', async function (req, res) {
     }
     
   } catch (err) {
-    console.log('Error in /authenticate', err)
+    console.log('Error in /authenticate', err);
   }
 });
 
@@ -225,3 +232,4 @@ app.get('/last-messages', async (req, res, next) => {
 app.listen(port, () => {
   console.log(`server started at http://localhost:${port}`);
 });
+// "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjQ2LCJ1c2VybmFtZSI6IkNvbm5vckJpc2hvcCIsInBhc3N3b3JkIjoicGFzc3dvcmQiLCJpYXQiOjE2OTk0OTUzMzR9.C3lfTTI3Uwl003v9hMXrhME7OKVbTh8fFoYgYIwumkY"
