@@ -55,26 +55,18 @@ app.use(async (req, res, next) => {
 });
 
 app.delete('/car/:id', (req, res) => {
-  console.log(req.params.id)
-
   res.json({ success: true })
 })
 
 // Creates a GET endpoint at <WHATEVER_THE_BASE_URL_IS>/students
 app.get('/car', async (req, res) => {
-  console.log('GET to /students');
-  const [cars] = await req.db.query(`
-    SELECT * FROM car;
-  `);
-
-  console.log('cars', cars);
+  const [cars] = await req.db.query(`SELECT * FROM car;`);
 
   // Attaches JSON content to the response
   res.json({ cars });
 });
 
 app.post('/car', async (req, res) => {
-  console.log('POST to /car', req.body);
   const { 
     make_id,
     model,
@@ -84,10 +76,13 @@ app.post('/car', async (req, res) => {
 
   const [insert] = await req.db.query(`
     INSERT INTO car (make_id, model, date_created, user_id, deleted_flag)
-    VALUES (:make_id, :model, NOW(), :user_id, :deleted_flag);
-  `, { make_id, model, user_id, deleted_flag });
-
-  console.log('insert', insert);
+    VALUES (:makeId, :model, NOW(), :user_id, :deleted_flag);
+  `, { 
+    make_id, 
+    model, 
+    user_id, 
+    deleted_flag
+  });
 
   // Attaches JSON content to the response
   res.json({
@@ -99,76 +94,54 @@ app.post('/car', async (req, res) => {
    });
 });
 
-// Creates a POST endpoint at <WHATEVER_THE_BASE_URL_IS>/students
-app.post('/students', (req, res) => {
-  console.log('POST to /students', req.body);
-
-  res.json({ success: true });
-});
-
-app.post('/register', async function (req, res, next) {
+// Hashes the password and inserts the info into the `user` table
+app.post('/register', async function (req, res) {
   try {
-    let encodedUser;
+    console.log('req.body', req.body)
+    const { password, username } = req.body;
+    
 
-    // Hashes the password and inserts the info into the `user` table
-    await bcrypt.hash(req.body.password, 10).then(async hash => {
-      try {
-        console.log('HASHED PASSWORD', hash);
+    const hashedPassword = await bcrypt.hash(password, 10);
+    console.log('username', username)
+    const [user] = await req.db.query(
+      `INSERT INTO user (user_name, password)
+      VALUES (:username, :hashedPassword);`,
+      { username, hashedPassword });
 
-        const [user] = await req.db.query(`
-          INSERT INTO user (user_name, password)
-          VALUES (:username, :password);
-        `, {
-          username: req.body.username,
-          password: hash
-        });
+    const jwtEncodedUser = jwt.sign(
+      { userId: user.insertId, ...req.body },
+      process.env.JWT_KEY
+    );
 
-        console.log('USER', user)
-
-        encodedUser = jwt.sign(
-          { 
-            userId: user.insertId,
-            ...req.body
-          },
-          process.env.JWT_KEY
-        );
-
-        console.log('ENCODED USER', encodedUser);
-      } catch (error) {
-        console.log('error', error);
-      }
-    });
-
-    res.json({ jwt: encodedUser });
-  } catch (err) {
-    console.log('err', err);
+    res.json({ jwt: jwtEncodedUser });
+  } catch (error) {
+    console.log('error', error);
     res.json({ err });
   }
 });
 
-app.post('/authenticate', async function (req, res) {
+app.post('/log-in', async function (req, res) {
   try {
-    console.log('ONE')
-    const { username, password } = req.body;
+    const { username, password: userEnteredPassword } = req.body;
     const [[user]] = await req.db.query(`SELECT * FROM user WHERE user_name = :username`, { username });
 
     if (!user) res.json('Username not found');
-    const dbPassword = `${user.password}`
-    const compare = await bcrypt.compare(password, dbPassword);
+  
+    const hashedPassword = `${user.password}`
+    const passwordMatches = await bcrypt.compare(userEnteredPassword, hashedPassword);
 
-    if (compare) {
+    if (passwordMatches) {
       const payload = {
         userId: user.id,
         username: user.username,
       }
       
-      const encodedUser = jwt.sign(payload, process.env.JWT_KEY);
+      const jwtEncodedUser = jwt.sign(payload, process.env.JWT_KEY);
 
-      res.json({ jwt: encodedUser });
+      res.json({ jwt: jwtEncodedUser });
     } else {
       res.json('Password not found');
     }
-    
   } catch (err) {
     console.log('Error in /authenticate', err);
   }
@@ -176,19 +149,18 @@ app.post('/authenticate', async function (req, res) {
 
 // Jwt verification checks to see if there is an authorization header with a valid jwt in it.
 app.use(async function verifyJwt(req, res, next) {
-  if (!req.headers.authorization) {
-    res.json('Invalid authorization, no authorization headers');
-  }
+  const { authorization: authHeader } = req.headers;
+  
+  if (!authHeader) res.json('Invalid authorization, no authorization headers');
 
-  const [scheme, token] = req.headers.authorization.split(' ');
+  const [scheme, jwtToken] = authHeader.split(' ');
 
-  if (scheme !== 'Bearer') {
-    res.json('Invalid authorization, invalid authorization scheme');
-  }
+  if (scheme !== 'Bearer') res.json('Invalid authorization, invalid authorization scheme');
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_KEY);
-    req.user = payload;
+    const decodedJwtObject = jwt.verify(jwtToken, process.env.JWT_KEY);
+
+    req.user = decodedJwtObject;
   } catch (err) {
     console.log(err);
     if (
@@ -209,27 +181,7 @@ app.use(async function verifyJwt(req, res, next) {
   await next();
 });
 
-// GET request to http://localhost:8080/last-messages ends here
-app.get('/last-messages', async (req, res, next) => {
-    try {
-
-      const [lastMessages] = await req.db.query(`
-      SELECT messages.* FROM messages,  
-      (
-        SELECT from_user_id, max(date_time) AS date_time FROM messages GROUP BY from_user_id
-      ) last_message 
-      WHERE messages.from_user_id = last_message.from_user_id 
-      AND messages.date_time = last_message.date_time`);
-    
-        res.json({ lastMessages });
-    } catch (err) {
-      console.log(err);
-      res.json({ err });
-    }
-});
-
 // Start the Express server
 app.listen(port, () => {
   console.log(`server started at http://localhost:${port}`);
 });
-// "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjQ2LCJ1c2VybmFtZSI6IkNvbm5vckJpc2hvcCIsInBhc3N3b3JkIjoicGFzc3dvcmQiLCJpYXQiOjE2OTk0OTUzMzR9.C3lfTTI3Uwl003v9hMXrhME7OKVbTh8fFoYgYIwumkY"
