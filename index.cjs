@@ -54,55 +54,13 @@ app.use(async (req, res, next) => {
   }
 });
 
-app.delete('/car/:id', (req, res) => {
-  res.json({ success: true })
-})
-
-// Creates a GET endpoint at <WHATEVER_THE_BASE_URL_IS>/students
-app.get('/car', async (req, res) => {
-  const [cars] = await req.db.query(`SELECT * FROM car;`);
-
-  // Attaches JSON content to the response
-  res.json({ cars });
-});
-
-app.post('/car', async (req, res) => {
-  const { 
-    make_id,
-    model,
-    user_id,
-    deleted_flag
-   } = req.body;
-
-  const [insert] = await req.db.query(`
-    INSERT INTO car (make_id, model, date_created, user_id, deleted_flag)
-    VALUES (:makeId, :model, NOW(), :user_id, :deleted_flag);
-  `, { 
-    make_id, 
-    model, 
-    user_id, 
-    deleted_flag
-  });
-
-  // Attaches JSON content to the response
-  res.json({
-    id: insert.insertId,
-    make_id,
-    model,
-    user_id,
-    deleted_flag
-   });
-});
-
 // Hashes the password and inserts the info into the `user` table
 app.post('/register', async function (req, res) {
   try {
-    console.log('req.body', req.body)
     const { password, username } = req.body;
-    
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    console.log('username', username)
+
     const [user] = await req.db.query(
       `INSERT INTO user (user_name, password)
       VALUES (:username, :hashedPassword);`,
@@ -113,16 +71,17 @@ app.post('/register', async function (req, res) {
       process.env.JWT_KEY
     );
 
-    res.json({ jwt: jwtEncodedUser });
+    res.json({ jwt: jwtEncodedUser, success: true });
   } catch (error) {
     console.log('error', error);
-    res.json({ err });
+    res.json({ err, success: false });
   }
 });
 
 app.post('/log-in', async function (req, res) {
   try {
     const { username, password: userEnteredPassword } = req.body;
+
     const [[user]] = await req.db.query(`SELECT * FROM user WHERE user_name = :username`, { username });
 
     if (!user) res.json('Username not found');
@@ -138,9 +97,9 @@ app.post('/log-in', async function (req, res) {
       
       const jwtEncodedUser = jwt.sign(payload, process.env.JWT_KEY);
 
-      res.json({ jwt: jwtEncodedUser });
+      res.json({ jwt: jwtEncodedUser, success: true });
     } else {
-      res.json('Password not found');
+      res.json({ err: 'Password is wrong', success: false });
     }
   } catch (err) {
     console.log('Error in /authenticate', err);
@@ -180,6 +139,54 @@ app.use(async function verifyJwt(req, res, next) {
 
   await next();
 });
+
+app.post('/car', async (req, res) => {
+  const { 
+    newMakeValue,
+    newModelValue,
+    newYearValue
+  } = req.body;
+
+  const { userId } = req.user;
+
+  const [insert] = await req.db.query(`
+    INSERT INTO car (make, model, year, date_created, user_id, deleted_flag)
+    VALUES (:newMakeValue, :newModelValue, :newYearValue, NOW(), :user_id, :deleted_flag);
+  `, { 
+    newMakeValue, 
+    newModelValue,
+    newYearValue,
+    user_id: userId, 
+    deleted_flag: 0
+  });
+
+  // Attaches JSON content to the response
+  res.json({
+    id: insert.insertId,
+    newMakeValue,
+    newModelValue,
+    newYearValue,
+    userId
+   });
+});
+
+// Creates a GET endpoint at <WHATEVER_THE_BASE_URL_IS>/car
+app.get('/car', async (req, res) => {
+  const { userId } = req.user;
+
+  const [cars] = await req.db.query(`SELECT * FROM car WHERE user_id = :userId AND deleted_flag = 0;`, { userId });
+
+  // Attaches JSON content to the response
+  res.json({ cars });
+});
+
+app.delete('/car/:id', async (req, res) => {
+  const { id: carId } = req.params;
+
+  await req.db.query(`UPDATE car SET deleted_flag = 1 WHERE id = :carId`, { carId })
+
+  res.json({ success: true });
+})
 
 // Start the Express server
 app.listen(port, () => {
