@@ -57,23 +57,25 @@ app.use(async (req, res, next) => {
 // Hashes the password and inserts the info into the `user` table
 app.post('/register', async function (req, res) {
   try {
-    const { password, username } = req.body;
+    const { password, username, userIsAdmin } = req.body;
+
+    const isAdmin = userIsAdmin ? 1 : 0
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const [user] = await req.db.query(
-      `INSERT INTO user (user_name, password)
-      VALUES (:username, :hashedPassword);`,
-      { username, hashedPassword });
+      `INSERT INTO user (user_name, password, admin_flag)
+      VALUES (:username, :hashedPassword, :userIsAdmin);`,
+      { username, hashedPassword, userIsAdmin: isAdmin });
 
     const jwtEncodedUser = jwt.sign(
-      { userId: user.insertId, ...req.body },
+      { userId: user.insertId, ...req.body, userIsAdmin: isAdmin },
       process.env.JWT_KEY
     );
 
     res.json({ jwt: jwtEncodedUser, success: true });
-  } catch (error) {
-    console.log('error', error);
+  } catch (err) {
+    console.log('error', err);
     res.json({ err, success: false });
   }
 });
@@ -93,6 +95,7 @@ app.post('/log-in', async function (req, res) {
       const payload = {
         userId: user.id,
         username: user.username,
+        userIsAdmin: user.admin_flag
       }
       
       const jwtEncodedUser = jwt.sign(payload, process.env.JWT_KEY);
@@ -169,6 +172,22 @@ app.post('/car', async (req, res) => {
     userId
    });
 });
+
+app.put('/car', async (req, res) => {
+  const { id, make, model, year } = req.body;
+
+  const [cars] = await req.db.query(
+    `UPDATE car SET make = :make, model = :model, year = :year WHERE id = :id;`, 
+    { 
+      id,
+      make,
+      model,
+      year
+     });
+
+  // Attaches JSON content to the response
+  res.json({ id, make, model, year, success: true });
+})
 
 // Creates a GET endpoint at <WHATEVER_THE_BASE_URL_IS>/car
 app.get('/car', async (req, res) => {
