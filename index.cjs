@@ -54,24 +54,76 @@ app.use(async (req, res, next) => {
   }
 });
 
+// These endpoints can be reached without needing a JWT
+app.get('/test', async (req, res) => {
+  const [cars] = await req.db.query(`SELECT * FROM car`);
+
+  console.log('/test endpoint reached');
+
+  res.json(cars);
+});
+
+app.put('/test', async (req, res) => {
+  const { 
+    newMakeValue,
+    newModelValue,
+    newYearValue
+  } = req.body;
+
+  const [insert] = await req.db.query(`
+    INSERT INTO car (make, model, year, date_created, user_id, deleted_flag)
+    VALUES (:newMakeValue, :newModelValue, :newYearValue, NOW(), :user_id, :deleted_flag);
+  `, { 
+    newMakeValue, 
+    newModelValue,
+    newYearValue,
+    user_id: 1, 
+    deleted_flag: 0
+  });
+
+  // Attaches JSON content to the response
+  res.json({
+    id: insert.insertId,
+    newMakeValue,
+    newModelValue,
+    newYearValue,
+    userId: 1
+   });
+})
+
+app.delete('/test/:id', async (req, res) => {
+  console.log(req.params);
+  const { id } = req.params;
+  await req.db.query(`UPDATE car SET deleted_flag = 1 WHERE id = :carId`, { carId: id });
+
+  res.json('Success!');
+});
+
 // Hashes the password and inserts the info into the `user` table
 app.post('/register', async function (req, res) {
   try {
     const { password, username, userIsAdmin } = req.body;
 
-    const isAdmin = userIsAdmin ? 1 : 0
+    const isAdmin = userIsAdmin ? 1 : 0;
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const [user] = await req.db.query(
-      `INSERT INTO user (user_name, password, admin_flag)
+      `INSERT INTO user (user_name, password, admin_flag) 
       VALUES (:username, :hashedPassword, :userIsAdmin);`,
-      { username, hashedPassword, userIsAdmin: isAdmin });
+      { 
+        username,
+        hashedPassword,
+        userIsAdmin: isAdmin
+      }
+    );
 
     const jwtEncodedUser = jwt.sign(
       { userId: user.insertId, ...req.body, userIsAdmin: isAdmin },
       process.env.JWT_KEY
     );
+
+    console.log('jwtEncodedUser', jwtEncodedUser);
 
     res.json({ jwt: jwtEncodedUser, success: true });
   } catch (err) {
@@ -159,7 +211,7 @@ app.post('/car', async (req, res) => {
     newMakeValue, 
     newModelValue,
     newYearValue,
-    user_id: userId, 
+    user_id: userId,
     deleted_flag: 0
   });
 
@@ -199,10 +251,11 @@ app.get('/car', async (req, res) => {
   res.json({ cars });
 });
 
+// http://localhost:3001/car/1
 app.delete('/car/:id', async (req, res) => {
   const { id: carId } = req.params;
 
-  await req.db.query(`UPDATE car SET deleted_flag = 1 WHERE id = :carId`, { carId })
+  await req.db.query(`UPDATE car SET deleted_flag = 1 WHERE id = :carId`, { carId });
 
   res.json({ success: true });
 })
