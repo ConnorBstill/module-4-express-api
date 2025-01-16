@@ -1,3 +1,9 @@
+// Client sends request
+// Server gets request
+// Request runs any middleware that is passes through to get to the endpoint it's headed to
+// Endpoint does something
+// Endpoint returns a response to the client which ends the request lifetime
+
 const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
@@ -12,7 +18,7 @@ const app = express();
 const port = process.env.PORT; // default port to listen
 
 const corsOptions = {
-   origin: '*', 
+   origin: '*',
    credentials: true,  
    'access-control-allow-credentials': true,
    optionSuccessStatus: 200,
@@ -31,6 +37,7 @@ app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 app.use(async (req, res, next) => {
+  console.log('This is running in the middlware')
   try {
     // Connecting to our SQL db. req gets modified and is available down the line in other middleware and endpoint functions
     req.db = await pool.getConnection();
@@ -55,13 +62,6 @@ app.use(async (req, res, next) => {
 });
 
 // These endpoints can be reached without needing a JWT
-app.get('/test', async (req, res) => {
-  const [cars] = await req.db.query(`SELECT * FROM car`);
-
-  console.log('/test endpoint reached');
-
-  res.json(cars);
-});
 
 app.put('/test', async (req, res) => {
   const { 
@@ -69,27 +69,35 @@ app.put('/test', async (req, res) => {
     newModelValue,
     newYearValue
   } = req.body;
-
+  
   const [insert] = await req.db.query(`
     INSERT INTO car (make, model, year, date_created, user_id, deleted_flag)
     VALUES (:newMakeValue, :newModelValue, :newYearValue, NOW(), :user_id, :deleted_flag);
-  `, { 
-    newMakeValue, 
-    newModelValue,
-    newYearValue,
-    user_id: 1, 
-    deleted_flag: 0
+    `, { 
+      newMakeValue, 
+      newModelValue,
+      newYearValue,
+      user_id: 1, 
+      deleted_flag: 0
+    });
+    
+    // Attaches JSON content to the response
+    res.json({
+      id: insert.insertId,
+      newMakeValue,
+      newModelValue,
+      newYearValue,
+      userId: 1
+    });
   });
 
-  // Attaches JSON content to the response
-  res.json({
-    id: insert.insertId,
-    newMakeValue,
-    newModelValue,
-    newYearValue,
-    userId: 1
-   });
-})
+app.get('/test', async (req, res) => {
+  const [cars] = await req.db.query(`SELECT * FROM car`);
+
+  console.log('/test endpoint reached');
+
+  res.json(cars);
+});
 
 app.delete('/test/:id', async (req, res) => {
   console.log(req.params);
@@ -119,7 +127,7 @@ app.post('/register', async function (req, res) {
     );
 
     const jwtEncodedUser = jwt.sign(
-      { userId: user.insertId, ...req.body, userIsAdmin: isAdmin },
+      { userId: user.insertId, username, userIsAdmin: isAdmin },
       process.env.JWT_KEY
     );
 
