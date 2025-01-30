@@ -71,13 +71,26 @@ app.put('/test', async (req, res) => {
   } = req.body;
   
   const [insert] = await req.db.query(`
-    INSERT INTO car (make, model, year, date_created, user_id, deleted_flag)
-    VALUES (:newMakeValue, :newModelValue, :newYearValue, NOW(), :user_id, :deleted_flag);
+    INSERT INTO car (
+      make, 
+      model, 
+      year, 
+      date_created, 
+      user_id, 
+      deleted_flag
+    )
+    VALUES (
+      :newMakeValue, 
+      :newModelValue, 
+      :newYearValue, 
+      NOW(), 
+      :user_id, 
+      :deleted_flag);
     `, { 
       newMakeValue, 
       newModelValue,
       newYearValue,
-      user_id: 1, 
+      user_id: 1,
       deleted_flag: 0
     });
     
@@ -110,11 +123,11 @@ app.delete('/test/:id', async (req, res) => {
 // Hashes the password and inserts the info into the `user` table
 app.post('/register', async function (req, res) {
   try {
-    const { password, username, userIsAdmin } = req.body;
-
-    const isAdmin = userIsAdmin ? 1 : 0;
+    const { password, username } = req.body;
 
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    console.log('hashedPassword', hashedPassword);
 
     const [user] = await req.db.query(
       `INSERT INTO user (user_name, password, admin_flag) 
@@ -122,12 +135,12 @@ app.post('/register', async function (req, res) {
       { 
         username,
         hashedPassword,
-        userIsAdmin: isAdmin
+        userIsAdmin: 0
       }
     );
 
     const jwtEncodedUser = jwt.sign(
-      { userId: user.insertId, username, userIsAdmin: isAdmin },
+      { userId: user.insertId, username },
       process.env.JWT_KEY
     );
 
@@ -253,7 +266,10 @@ app.put('/car', async (req, res) => {
 app.get('/car', async (req, res) => {
   const { userId } = req.user;
 
-  const [cars] = await req.db.query(`SELECT * FROM car WHERE user_id = :userId AND deleted_flag = 0;`, { userId });
+  const [cars] = await req.db.query(
+    `SELECT * FROM car WHERE user_id = :userId AND deleted_flag = 0;`, 
+    { userId: userId }
+  );
 
   // Attaches JSON content to the response
   res.json({ cars });
